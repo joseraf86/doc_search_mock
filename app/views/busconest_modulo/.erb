@@ -1,0 +1,52 @@
+<h3>DOC ID: <%= @doc_id %><h3/>
+
+
+<h2>Subir Documento</h2>
+
+ <%= hidden_field_tag :doc_id, @doc_id %>
+
+<div>
+
+<%= form_tag(nil, :html => {:class => "form_horizontal", :onsubmit => "return startUploading( #{@doc_id} );",  :multipart => true }, :url => { :action => "http://localhost:3001/guardar_archivo" }) do |f| %>
+
+  <div class="field">
+    <%= label_tag :publicacion, :class => "control-label" %><br />
+    <%= file_field_tag :publicacion, :onchange => "fileSelected();" %>
+
+    <!-- FILE UPLOAD  enctype="multipart/form-data"   -->
+            <div id="fileinfo">
+                <div id="filename"></div>
+                <div id="filesize"></div>
+                <div id="filetype"></div>
+                <div id="filedim"></div>
+            </div>
+            <div id="error">You should select valid image files only!</div>
+            <div id="error2">An error occurred while uploading the file</div>
+            <div id="abort">The upload has been canceled by the user or the browser dropped the connection</div>
+            <div id="warnsize">Your file is very big. We can't accept it. Please select more small file</div>
+
+            <div id="progress_info">
+                <div id="progress"></div>
+                <div id="progress_percent">&nbsp;</div>
+                <div class="clear_both"></div>
+                <div>
+                    <div id="speed">&nbsp;</div>
+                    <div id="remaining">&nbsp;</div>
+                    <div id="b_transfered">&nbsp;</div>
+                    <div class="clear_both"></div>
+                </div>
+                <div id="upload_response"></div>
+            </div>
+
+        <img id="preview" />
+    
+
+    <!-- END FILE UPLOAD -->
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+
+<% end %>
+</div>

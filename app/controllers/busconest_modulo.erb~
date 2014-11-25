@@ -1,0 +1,412 @@
+# Encoding: UTF-8
+class DocumentosController < AdminController
+  include Utilidades
+
+  # Estado del documento
+  NUEVO = 1
+  INDEXADO = 2
+
+  # Visibilidad
+  PUBLICO = 1
+  PRIVADO = 2
+
+  # Escuelas
+  BIOLOGIA = 1
+  COMPUTACION = 2
+  FISICA = 3
+  GEOQUIMICA = 4
+  MATEMATICA = 5
+  QUIMICA = 6
+
+  # Tipo de documento
+  TEG = 1
+  SEM = 2
+  
+  # GET /documentos
+  # GET /documentos.json
+  def index
+    # @documentos = Documento.all
+    @documentos = Documento.order("fecha_publicacion DESC").paginate(:page => params[:page])
+
+    respond_to do |format|
+      format.html # index.html.erb
+      format.json { render json: @documentos }
+    end
+  end
+
+  # GET /documentos/1
+  # GET /documentos/1.json
+  def show
+    @documento = Documento.find(params[:id])
+
+    respond_to do |format|
+      format.html # show.html.erb
+      format.json { render json: @documento }
+    end
+  end
+
+  # GET /documentos/new
+  # GET /documentos/new.json
+  def new
+    @documento = Documento.new
+
+    respond_to do |format|
+      format.html # new.html.erb
+      format.json { render json: @documento }
+    end
+  end
+
+  # GET /documentos/1/edit
+  def edit
+    @documento = Documento.find(params[:id])
+
+    # Variables para preservar los valores de los text-field autocompletados
+    @autor1 = @documento.personas_autor.first
+    @autor2 = @documento.personas_autor.second
+    @autor3 = @documento.personas_autor.third
+
+    @tutor1 = @documento.personas_tutor.first
+    @tutor2 = @documento.personas_tutor.second
+
+    @jurado1 = @documento.personas_jurado.first
+    @jurado2 = @documento.personas_jurado.second
+  end
+
+  # POST /documentos
+  # POST /documentos.json
+  def create
+
+#@parametro = params[:image_file].original_filename
+
+    @documento = Documento.new(params[:documento])
+    @documento.estado = 'INCOMPLETO'
+
+    # Si el documento no es evaluado, eliminar la nota
+    unless params[:documento][:tipo_documento_id].to_i.between?(1,2)
+       @documento.calificacion = 0     
+    end
+
+    # Crear autores, tutores y jurados
+    crear_autores(@documento,params)
+    crear_tutores(@documento,params)
+    crear_jurados(@documento,params)
+
+    # Inicializar el estado del documento a NUEVO
+    @documento.estado_documento_id = NUEVO
+
+    # Variables para preservar los valores de los text-field autocompletados
+    @autor1 = @documento.personas_autor.first
+    @autor2 = @documento.personas_autor.second
+    @tutor1 = @documento.personas_tutor.first
+    @tutor2 = @documento.personas_tutor.second
+    @jurado1 = @documento.personas_jurado.first
+    @jurado2 = @documento.personas_jurado.second
+
+    @documento.descargas = 0
+
+    respond_to do |format|
+      if @documento.save
+        #@documento.update_attributes( :paginas =>  Utilidades::contar_paginas(@documento.publicacion.path))
+        #format.html { redirect_to @documento, notice: 'Documento creado' }
+        format.html { redirect_to "/subir_archivo/#{@documento.id}" }
+        format.json { render json: @documento, status: :created, location: @documento }
+      else
+        format.html { render :action => "new", :layout => !request.xhr? }
+        #render action: "new", notice: "prueba_notice",  }
+        format.json { render json: @documento.errors, status: :unprocessable_entity }
+      end
+    end
+  end
+
+  def subir_archivo
+    @documento = Documento.find(params[:id])
+  end
+
+  def guardar_archivo
+    doc = Documento.find(params[:id])
+    doc.update_attributes(params[:documento])
+    doc.update_attributes( :paginas =>  Utilidades::contar_paginas(doc.publicacion.path), :estado => 'COMPLETO' )
+  end
+
+  # PUT /documentos/1
+  # PUT /documentos/1.json
+  def update
+    @documento = Documento.find(params[:id])
+
+    # Si no hay ningun check box marcado en el campo "reconocimientos" del formulario _form.erb
+    # se destruyen todos los reconocimientos del documento.
+    # El browser no envia parametros si no se marca un check box
+    #
+    @documento.reconocimientos.destroy_all unless params.has_key?(:reconocimientos_ids)
+    @documento.areas.destroy_all           unless params.has_key?(:areas_ids)
+
+    # Actualizar autores, tutores y jurados
+    actualizar_autores(@documento,params)
+
+    # Si el documento es TEG o SEM
+    if params[:documento][:tipo_documento_id].to_i.between?(1,2)
+      # Eliminar el 3° autor
+      if @documento.autors.size == 3
+        @documento.autors.third.destroy unless autores.third.nil?
+      end#if
+
+      # Actualizar tutores y jurados
+      actualizar_tutores(@documento, params)
+      actualizar_jurados(@documento, params)
+    else
+      # Si el documento no es TEG o SEM eliminar todos 
+      # los tutores, jurados y la calificacion
+      #
+      @documento.tutors.destroy_all
+      @documento.jurados.destroy_all
+      params[:documento][:calificacion] = 0
+    end#if
+
+    # Eliminar Contenido#texto anterior
+    # Elimnar cindex, tindex, rindex, clindex anteriores
+    #
+    limpiar_indices(@documento)
+
+    # Actualizar el estado del documento a NUEVO
+    @documento.estado_documento_id = NUEVO
+
+    # Variables para preservar los valores de los text-field autocompletados
+    @autor1 = @documento.personas_autor.first
+    @autor2 = @documento.personas_autor.second
+    @autor3 = @documento.personas_autor.third
+    @tutor1 = @documento.personas_tutor.first
+    @tutor2 = @documento.personas_tutor.second
+    @jurado1 = @documento.personas_jurado.first
+    @jurado2 = @documento.personas_jurado.second
+
+    respond_to do |format|
+      if @documento.update_attributes(params[:documento])
+        format.html { redirect_to "/subir_archivo/#{@documento.id}" }
+        format.json { head :no_content }
+      else
+        format.html { render action: "edit" }
+        format.json { render json: @documento.errors, status: :unprocessable_entity }
+      end
+    end
+  end
+
+  # DELETE /documentos/1
+  # DELETE /documentos/1.json
+  def destroy
+    @documento = Documento.find(params[:id])
+    # Eliminar los registros asociativos de las tablas JOIN 
+    # para las asociaciones HBTM (has_and_belongs_to_many)
+    #
+    @documento.reconocimientos.destroy_all
+    @documento.areas.destroy_all
+
+    @documento.destroy
+
+    respond_to do |format|
+      format.html { redirect_to documentos_url, :notice => "#{@documento.titulo} eliminado" }
+      format.json { head :no_content }
+    end
+  end
+
+  def indexar
+    @documento = Documento.find(params[:id])
+    #si el documento tiene el estado NUEVO
+    if @documento.estado_documento_id == NUEVO && @documento.estado == 'COMPLETO'
+      #almacenar el nuevo contenido en la BB.DD.
+      @documento.build_contenido
+      @documento.contenido.texto = Utilidades::extraer_texto(@documento.publicacion.path)
+      @documento.contenido.save
+
+      Utilidades::llenar_tindex(@documento)
+      Utilidades::llenar_cindex(@documento)
+      Utilidades::llenar_rindex(@documento)
+      Utilidades::llenar_clindex(@documento)
+
+      @documento.estado_documento_id = INDEXADO
+
+      respond_to do |format|
+        if @documento.save
+          format.html { redirect_to documentos_url, notice: "El documento #{@documento.titulo} fue indexado exitosamente" }
+          format.json { head :no_content }
+        else
+          format.html { redirect_to documentos_url, alert: "Algo salio mal #{@documento.errors.messages}"}
+          format.json { render json: @documento.errors, status: :unprocessable_entity }
+        end#if
+      end#do
+    else
+      respond_to do |format|
+          format.html { redirect_to documentos_url, notice: "El documento #{@documento.titulo} ya se encuentra indexado" }
+          format.json { head :no_content }
+      end#do
+    end#if
+  end#def
+
+
+  def datos_documento
+    @documento = Documento.find(params[:id])
+
+    respond_to do |format|
+      format.html { render :layout => !request.xhr? }
+      #format.json { render json: @documento }
+    end
+  end
+
+  def dashboard
+
+    # Tabla general
+    @documentos_totales = Documento.all.size
+
+    @documentos_indexados_totales = Documento.where("estado_documento_id = ?", INDEXADO).size
+    @documentos_nuevos_totales = Documento.where("estado_documento_id = ?", NUEVO).size
+
+    @documentos_publicos_totales = Documento.where("visibilidad_id = ?", PUBLICO).size
+    @documentos_privados_totales = Documento.where("visibilidad_id = ?", PRIVADO).size
+
+    # Tabla documentos por escuela
+    @documentos_escuela_hash = Hash.new 0
+    Escuela.all.each do |escuela|
+      @documentos_escuela_hash[escuela.descripcion] = escuela.documentos.size
+    end#do
+
+    max_escuela = @documentos_escuela_hash.max_by{|k,v| v}.second
+    @escuelas_max = @documentos_escuela_hash.select { |escuela,documentos| documentos == max_escuela }
+
+    # Tabla documentos por area
+    @documentos_area_hash = Hash.new 0
+    Area.all.each do |area|
+      @documentos_area_hash[area.descripcion] = area.documentos.size
+    end#do
+
+    if @documentos_area_hash.any? 
+      max_area = @documentos_area_hash.max_by{|k,v| v}.second
+      @areas_max = @documentos_area_hash.select { |area,documentos| documentos == max_area }
+    end
+
+    # Tabla documentos por tipo de documento
+    @documentos_tipo_hash = Hash.new 0
+    TipoDocumento.all.each do |tipo|
+      @documentos_tipo_hash[tipo.descripcion] = tipo.documentos.size
+    end#do
+
+    max_tipo = @documentos_tipo_hash.max_by{|k,v| v}.second
+    @tipos_max = @documentos_tipo_hash.select { |tipo,documentos| documentos == max_tipo }
+
+    personas = Persona.all
+    # Autores con mas documentos
+    max_autor = personas.map { |persona| [persona.nombre_completo, persona.documentos_autor.size] }
+    maximo_a = max_autor.max_by { |data| data.second }.second 
+    @autores_maximo = max_autor.select { |persona| persona.second == maximo_a }
+   
+    # Tutores con mas documentos
+    max_tutor = personas.map { |persona| [persona.nombre_completo, persona.documentos_tutor.size] }
+    maximo_t = max_tutor.max_by { |data| data.second }.second 
+    @tutores_maximo = max_tutor.select { |persona| persona.second == maximo_t }
+
+    # Jurados con mas documentos
+    max_jurado = personas.map { |persona| [persona.nombre_completo, persona.documentos_jurado.size] }
+    maximo_j = max_jurado.max_by { |data| data.second }.second 
+    @jurados_maximo = max_jurado.select { |persona| persona.second == maximo_j }
+
+    # Documentos con y sin calificacion
+    @documentos_calificados_totales = Documento.where("calificacion > 0").size
+    @documentos_no_calificados_totales = Documento.where("visibilidad_id = 0").size
+
+    # Promedios de los TEG (Trabajo Especial de Grado)
+    # Promedio general
+    #
+    teg_ciencias = Documento.where("calificacion > 0 AND tipo_documento_id = ?", TEG ).select("calificacion")
+    if teg_ciencias.any?
+      @promedio_TEG_ciencias = teg_ciencias.inject(0.0) { |sum, nota| sum + nota.calificacion }/teg_ciencias.size.to_f
+    else
+      @promedio_TEG_ciencias = 0.0
+    end#end
+
+    # Promedio TEG por escuelas
+    escuelas_hash = Hash.new 0
+    Escuela.all.each {|escuela| escuelas_hash[escuela.descripcion] = escuela.id }
+
+    @promedios_TEG_escuelas_hash = Hash.new 0
+    escuelas_hash.each do |escuela, n|
+      teg_ciencias = Documento.where("calificacion > 0 AND tipo_documento_id = ? AND escuela_id = ?", TEG, n ).select("calificacion")
+      if teg_ciencias.any?
+        @promedios_TEG_escuelas_hash[escuela] = teg_ciencias.inject(0.0) { |sum, nota| sum + nota.calificacion }/teg_ciencias.size.to_f
+      else
+        @promedios_TEG_escuelas_hash[escuela] = 0.0
+      end#end
+    end#do
+
+    # Promedios de los SEM (seminarios)
+    # Promedio general
+    #
+    sem_ciencias  = Documento.where("calificacion > 0 AND tipo_documento_id = ?", SEM ).select("calificacion")
+    if sem_ciencias.any?
+      @promedio_SEM_ciencias = sem_ciencias.inject(0.0) { |sum, nota| sum + nota.calificacion }/sem_ciencias.size.to_f
+    else
+      @promedio_SEM_ciencias = 0.0
+    end#end
+
+    # Promedios SEM por escuela
+    @promedios_SEM_escuelas_hash = Hash.new 0
+    escuelas_hash.each do |escuela, n|
+      sem_ciencias = Documento.where("calificacion > 0 AND tipo_documento_id = ? AND escuela_id = ?", SEM, n ).select("calificacion")
+      if sem_ciencias.any?
+        @promedios_SEM_escuelas_hash[escuela] = sem_ciencias.inject(0.0) { |sum, nota| sum + nota.calificacion }/sem_ciencias.size.to_f
+      else
+        @promedios_SEM_escuelas_hash[escuela] = 0.0
+      end#end
+    end#do
+
+    # Agrupar los TEG segun rango de calificacion [1-9] [10-14] [15-16] [17-18] [19-20]
+    @teg_rangos = Hash.new 0
+    [[0,9],[10,14],[15,16],[17,18],[19,20]].each do |rango|
+      docs = Documento.where(:calificacion => (rango.first..rango.second), :tipo_documento_id => TEG )
+      if docs.any?
+        @teg_rangos[rango] = docs.size
+      else
+        @teg_rangos[rango] = 0
+      end#if
+    end#do
+
+    # Agrupar los SEM segun rango de calificacion [1-9] [10-14] [15-16] [17-18] [19-20]
+    @sem_rangos = Hash.new 0
+    [[0,9],[10,14],[15,16],[17,18],[19,20]].each do |rango|
+      docs = Documento.where(:calificacion => (rango.first..rango.second), :tipo_documento_id => SEM )
+      if docs.any?
+        @sem_rangos[rango] = docs.size
+      else
+        @sem_rangos[rango] = 0
+      end#if
+    end#do
+   
+    #respond_to do |format|
+    #  format.html { render action: "mostrar_dashboard" }
+    #  format.json { head :no_content }
+    #end#do
+  end#def
+
+  def descargar
+
+    @documento = Documento.find(params[:id])
+
+    if @documento.visibilidad.descripcion == "PUBLICO" || usuario_signed_in?
+      unless @documento.descargas.nil?
+        @documento.update_attributes(:descargas => @documento.descargas += 1)
+      else
+        @documento.update_attributes(:descargas => 1)
+      end#unless
+
+      send_file("#{Rails.root}/documentos/#{@documento.escuela.descripcion}/#{@documento.fecha_publicacion.year}/documento_#{@documento.id}.pdf",
+                :filename    => "documento_#{@documento.id}",
+                :type        => 'application/pdf') #for example if pdf
+
+      #respond_to do |format|
+      #  format.html { redirect_to @documento.publicacion.url }
+      #end#do
+    else
+      respond_to do |format|
+        format.html { redirect_to '/busqueda_simple' }
+      end#do
+    end#if
+  end#def
+
+end#class

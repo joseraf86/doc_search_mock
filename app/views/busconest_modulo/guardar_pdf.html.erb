@@ -1,0 +1,58 @@
+<div class="container">
+
+<h3>DOC ID:    <%= @doc_id %><h3/>
+<h3>ci:        <%= @ci %>    <h3/>
+<h3>ci pareja: <%= @ci_p %>  <h3/>
+<h3>titulo:    <%= @titulo %><h3/>
+
+<h2>Subir Documento</h2>
+
+<%= form_tag("http://127.0.0.1:3001/guardar_archivo_conest", :id => "formulario", :class => "form_horizontal", :onsubmit => "return startUploading( #{@doc_id} );",  :multipart => true) %>
+
+  <%= hidden_field_tag :id, @doc_id %>
+  <%= hidden_field_tag "_method", "put" %>
+  <%= hidden_field_tag 'ci',     @ci %>
+  <%= hidden_field_tag 'ci_p',   @ci_p %>
+  <%= hidden_field_tag 'titulo', @titulo %>
+
+  <div class="field">
+    <%= label_tag :publicacion %><br />
+    <%= file_field_tag :documento_publicacion, :name => "documento[publicacion]", :onchange => "fileSelected();" %>
+
+    <!-- FILE UPLOAD  enctype="multipart/form-data"   -->
+            <div id="fileinfo">
+                <div id="filename"></div>
+                <div id="filesize"></div>
+                <div id="filetype"></div>
+                <div id="filedim"></div>
+            </div>
+            <div id="error">Debes seleccionar un archivo en formato PDF </div>
+            <div id="error2">Un error ha ocurrido durante la carga del documento</div>
+            <div id="abort">La carga ha sido cancelada por el usuario o el navegador ha cancelado la conexion</div>
+            <div id="warnsize">Tu archivo es muy grande. Por favor seleccione un archivo mas pequeño</div>
+
+            <div id="progress_info">
+                <div id="progress"></div>
+                <div id="progress_percent">&nbsp;</div>
+                <div class="clear_both"></div>
+                <div>
+                    <div id="speed">&nbsp;</div>
+                    <div id="remaining">&nbsp;</div>
+                    <div id="b_transfered">&nbsp;</div>
+                    <div class="clear_both"></div>
+                </div>
+                <div id="upload_response"></div>
+            </div>
+
+        <img id="preview" />
+    
+
+    <!-- END FILE UPLOAD -->
+  </div>
+
+  <div class="actions">
+    <%= submit_tag "Guardar" %>
+  </div>
+
+</div>
+

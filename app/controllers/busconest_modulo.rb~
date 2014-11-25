@@ -1,0 +1,27 @@
+# Encoding: UTF-8
+class BusconestModulo < ApplicationController
+
+  # Estado del documento
+  NUEVO = 1
+  INDEXADO = 2
+
+  # Visibilidad
+  PUBLICO = 1
+  PRIVADO = 2
+
+  # Escuelas
+  BIOLOGIA = 1
+  COMPUTACION = 2
+  FISICA = 3
+  GEOQUIMICA = 4
+  MATEMATICA = 5
+  QUIMICA = 6
+
+  # Tipo de documento
+  TEG = 1
+  SEM = 2
+  
+  def subir_teg
+  end
+
+end#class

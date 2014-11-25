@@ -1,0 +1,501 @@
+# Encoding: UTF-8
+class BusconestModuloController < ApplicationController
+
+  def subir_teg
+    # Setear valores de error si los hubiere
+    case params[:error]
+      when '001'
+        @errores = 'Debes seleccionar una pareja'
+      when '002'
+        @errores = 'Datos invalidos, el titulo, el resumen y las palabras claves son campos obligatorios'
+      when '003'
+        @errores = 'Error de sesion'
+    end#case 
+
+    # Recuperar estudiante_en_licenciatura de la sesion 
+    # ale 19395140   maria-valeska 19692557 //adriana urdaneta "18233140"//miguel chan 17386894 // DANIELA ANDREA GOMEZ GARCIA 20201240
+    # yaremis carolina 19368587 ELIANA  NAVARRO SCIOSCIA // 17965908 ALEJANDRA SOFIA BETANCOURT QUEFFELEC
+    # 20800134 EMILY MARIA BAZDIKIAN TORRES//
+    result = ActiveRecord::Base.connection.execute('SELECT * FROM estudiante_en_licenciatura WHERE estudiante_cedula LIKE "18233140"') 
+    session[:estudiante_en_licenciatura] = result.to_a.first
+    @estudiante_en_licenciatura = session[:estudiante_en_licenciatura] 
+    @cedula = session[:estudiante_en_licenciatura][0]
+
+    # Recuperar el periodo_academico y el ano_lectivo actual del calendario_academico
+    my_query = "SELECT periodo_academico, ano_lectivo FROM calendario_academico WHERE activo LIKE \"1\""
+    res = ActiveRecord::Base.connection.execute(my_query).to_a 
+    @periodo_academico_actual = res[0][0]
+    @ano_lectivo_actual = res[0][1]
+ 
+    # Recuperar el periodo_academico_egreso y el ano_lectivo_egreso del estudiante
+    @periodo_academico_egreso =  session[:estudiante_en_licenciatura] [2]
+    @ano_lectivo_egreso =  session[:estudiante_en_licenciatura] [3]
+
+    # Recuperar la fecha de la planilla_individual (presentacion de TEG) para saber 
+    # si el estudiante ya aprobo el TEG y NO ha subido el documento TEG
+    my_query = "SELECT estudiante_cedula 
+                FROM planilla_individual 
+                WHERE estudiante_cedula LIKE #{@cedula} AND 
+                      es_entrega_tesis LIKE \"1\" AND 
+                      documento_subido IS NULL"
+
+    datos = ActiveRecord::Base.connection.execute(my_query).to_a.first
+    @tesista_aprobado_sin_documento_subido = datos
+
+   if @tesista_aprobado_sin_documento_subido.nil? &&
+      @periodo_academico_actual==@periodo_academico_egreso &&
+      @ano_lectivo_actual==@ano_lectivo_egreso
+
+    # Recuperar datos personales del estudiante
+    my_query = "SELECT primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, correo FROM estudiante WHERE cedula LIKE #{@cedula}"
+    datos = ActiveRecord::Base.connection.execute(my_query).to_a.first
+    @nombres   = datos[0]+' '+datos[1]
+    @apellidos = datos[2]+' '+datos[3]
+    @correo = datos[4]
+
+    # Recuperar notas generales del estudiante
+    my_query = "SELECT promedio_general, promedio_ponderado, eficiencia FROM estudiante_datos_academicos WHERE estudiante_cedula LIKE #{@cedula}"
+    datos = ActiveRecord::Base.connection.execute(my_query).to_a.first
+    @promedio_general   = datos[0]
+    @promedio_ponderado = datos[1]
+    @eficiencia         = datos[2]
+    
+
+    # Recuperar mencion del estudiante
+    my_query =  "SELECT gra.mencion_id 
+                 FROM graduando as gra 
+                   JOIN mencion as men  ON (gra.mencion_id=men.id)  
+                 WHERE gra.estudiante_cedula LIKE \"#{@cedula}\""
+
+    datos = ActiveRecord::Base.connection.execute(my_query).to_a
+    @mencion_id = datos[0].first   
+   
+    # Recuperar la fecha de la planilla_individual (presentacion de TEG)
+    my_query = "SELECT fecha_presentacion 
+                FROM planilla_individual 
+                WHERE estudiante_cedula LIKE #{@cedula} AND 
+                      es_entrega_tesis LIKE \"1\""
+
+    datos = ActiveRecord::Base.connection.execute(my_query).to_a
+    @fecha_presentacion = datos[0]
+    
+    # Recuperar la escuela
+    case session[:estudiante_en_licenciatura][1]
+      when 'B'
+        @escuela = 'BIOLOGIA'
+      when 'C'
+        @escuela = 'COMPUTACION'
+      when 'F'
+        @escuela = 'FISICA'
+      when 'G'
+        @escuela = 'GEOQUIMICA'
+      when 'M'
+        @escuela = 'MATEMATICA'
+      when 'Q'
+        @escuela = 'QUIMICA'
+    end#case
+
+     # Recuperar la nota del TEG
+     my_query = "SELECT DISTINCT tipo_nota.nombre
+                 FROM planilla_individual as presentacion
+                   JOIN calificacion ON presentacion.materia_codigo = calificacion.materia_codigo
+                   JOIN tipo_nota ON tipo_nota.id = calificacion.tipo_nota_id_definitiva
+                   JOIN historial_academico ON presentacion.estudiante_cedula = historial_academico.estudiante_cedula
+                 WHERE presentacion.es_entrega_tesis LIKE \"1\" AND
+                       presentacion.estudiante_cedula LIKE \"#{@cedula}\" AND 
+                       calificacion.estudiante_cedula LIKE \"#{@cedula}\" AND
+                       historial_academico.estudiante_cedula LIKE \"#{@cedula}\" AND
+                       historial_academico.tipo_status_materia_id LIKE \"A\""
+
+     datos = ActiveRecord::Base.connection.execute(my_query).to_a.flat_map { |x| x }
+     @nota = datos.select { |nota| nota =~ /\d/ }.first
+
+     # Recuperar premios
+     my_query = "SELECT tipo_premio_academico.nombre 
+                 FROM tipo_premio_academico 
+                   JOIN graduando_con_premio ON graduando_con_premio.tipo_premio_academico_id = tipo_premio_academico.id
+                 WHERE estudiante_cedula LIKE \"#{@cedula}\""
+     datos = ActiveRecord::Base.connection.execute(my_query).to_a.flat_map { |x| x }
+     @premio  = datos.first #unless datos.nil?
+     @premio2 = datos.second #unless datos.nil?
+
+    # RECUPERAR DATOS TUTORES
+    # Buscar los tutores en la tabla docente_planilla
+    my_query = "SELECT id
+                FROM planilla_individual
+                WHERE estudiante_cedula LIKE #{@cedula} AND 
+                      es_entrega_tesis LIKE \"1\""
+
+    datos = ActiveRecord::Base.connection.execute(my_query).to_a
+    unless datos[0].nil?
+      @planilla_individual_id = datos[0].first
+    else
+      #redirect_to "/subir_teg"
+      return
+    end#unless
+
+    my_query = "SELECT docente_cedula 
+                FROM docente_planilla
+                WHERE planilla_individual_id = #{@planilla_individual_id} AND
+                      tipo_jurado_id LIKE 'TU'"
+    datos = ActiveRecord::Base.connection.execute(my_query).to_a
+    tutores_ci = datos
+
+    # Si hay 2 tutores en la tabla docente_planilla
+    if tutores_ci.size == 2
+      @tutor  = tutores_ci[0].first
+      my_query = "SELECT cedula, nombre, correo FROM docente WHERE cedula LIKE #{@tutor}"
+      res = ActiveRecord::Base.connection.execute(my_query).to_a
+      @tutor1_ci = res[0][0]
+      @tutor1_nombre = res[0][1]
+      @tutor1_correo = res[0][2]  
+
+      @tutor2 = tutores_ci[1].first
+      my_query = "SELECT cedula, nombre, correo FROM docente WHERE cedula LIKE #{@tutor2}"
+      res = ActiveRecord::Base.connection.execute(my_query).to_a
+      @tutor2_ci = res[0][0]
+      @tutor2_nombre = res[0][1]
+      @tutor2_correo = res[0][2] 
+    end#if
+
+    # Si hay 1 tutor en la tabla docente_planilla
+    if tutores_ci.size == 1
+      @tutor  = tutores_ci[0].first
+      my_query = "SELECT cedula, nombre, correo FROM docente WHERE cedula LIKE #{@tutor}"
+      res = ActiveRecord::Base.connection.execute(my_query).to_a
+      @tutor1_ci = res[0][0]
+      @tutor1_nombre = res[0][1]
+      @tutor1_correo = res[0][2]
+    end#if
+
+    # Buscar los tutores en la tabla calificador_externo_planilla
+    my_query = "SELECT calificador_externo_cedula 
+                FROM calificador_externo_planilla
+                WHERE planilla_individual_id = #{@planilla_individual_id}
+                      AND tipo_jurado_id LIKE 'TU'"
+    datos = ActiveRecord::Base.connection.execute(my_query).to_a
+    tutores_ci = datos
+
+    # Si hay 2 tutores en la tabla calificador_externo_planilla
+    if tutores_ci.size == 2
+      @tutor  = tutores_ci[0].first
+      my_query = "SELECT cedula, nombre, correo FROM calificador_externo WHERE cedula LIKE #{@tutor}"
+      res = ActiveRecord::Base.connection.execute(my_query).to_a
+      @tutor1_ci = res[0][0]
+      @tutor1_nombre = res[0][1]
+      @tutor1_correo = res[0][2]  
+
+      @tutor2 = tutores_ci[1].first
+      my_query = "SELECT cedula, nombre, correo FROM calificador_externo WHERE cedula LIKE #{@tutor2}"
+      res = ActiveRecord::Base.connection.execute(my_query).to_a
+      @tutor2_ci = res[1][0]
+      @tutor2_nombre = res[1][1]
+      @tutor2_correo = res[1][2] 
+    end#if
+
+    # Si hay 1 tutor en la tabla calificador_externo_planilla 
+    if tutores_ci.size == 1
+      @tutor  = tutores_ci[0].first
+      my_query = "SELECT cedula, nombre, correo FROM calificador_externo WHERE cedula LIKE #{@tutor}"
+      res = ActiveRecord::Base.connection.execute(my_query).to_a
+      @tutor2_ci = res[0][0]
+      @tutor2_nombre = res[0][1]
+      @tutor2_correo = res[0][2]
+    end#if
+
+    # RECUPERAR DATOS JURADOS
+    # Buscar los jurados en la tabla docente_planilla
+
+    my_query = "SELECT docente_cedula 
+                FROM docente_planilla
+                WHERE planilla_individual_id = #{@planilla_individual_id}
+                      AND (tipo_jurado_id LIKE 'J1'
+                      OR tipo_jurado_id LIKE 'J2')"
+
+    datos = ActiveRecord::Base.connection.execute(my_query).to_a
+    jurados_ci = datos
+
+    # Si hay 2 jurados en la tabla docente_planilla
+    if jurados_ci.size == 2
+      @jurado  = jurados_ci[0].first
+      my_query = "SELECT cedula, nombre, correo FROM docente WHERE cedula LIKE #{@jurado}"
+      res = ActiveRecord::Base.connection.execute(my_query).to_a
+      @jurado1_ci = res[0][0]
+      @jurado1_nombre = res[0][1]
+      @jurado1_correo = res[0][2]  
+
+      @jurado2 = jurados_ci[1].first
+      my_query = "SELECT cedula, nombre, correo FROM docente WHERE cedula LIKE #{@jurado2}"
+      res = ActiveRecord::Base.connection.execute(my_query).to_a
+      @jurado2_ci = res[0][0]
+      @jurado2_nombre = res[0][1]
+      @jurado2_correo = res[0][2] 
+    end#if
+
+    # Si hay 1 jurado en la tabla docente_planilla
+    if jurados_ci.size == 1
+      @jurado1  = jurados_ci[0].first
+      my_query = "SELECT cedula, nombre, correo FROM docente WHERE cedula LIKE #{@jurado1}"
+      res = ActiveRecord::Base.connection.execute(my_query).to_a
+      @jurado1_ci = res[0][0]
+      @jurado1_nombre = res[0][1]
+      @jurado1_correo = res[0][2]
+    end#if
+
+    my_query = "SELECT calificador_externo_cedula 
+                FROM calificador_externo_planilla
+                WHERE planilla_individual_id = #{@planilla_individual_id}
+                      AND (tipo_jurado_id LIKE 'J1'
+                      OR tipo_jurado_id LIKE 'J2')"
+
+    datos = ActiveRecord::Base.connection.execute(my_query).to_a
+    jurados_ci = datos
+
+    # Si hay 2 jurados en la tabla calificador_externo_planilla
+    if jurados_ci.size == 2
+      @jurado1  = jurados_ci[0].first
+      my_query = "SELECT cedula, nombre, correo FROM calificador_externo WHERE cedula LIKE #{@jurado1}"
+      res = ActiveRecord::Base.connection.execute(my_query).to_a
+      @jurado1_ci = res[0][0]
+      @jurado1_nombre = res[0][1]
+      @jurado1_correo = res[0][2]  
+
+      @jurado2 = jurados_ci[1].first
+      my_query = "SELECT cedula, nombre, correo FROM calificador_externo WHERE cedula LIKE #{@jurado2}"
+      res = ActiveRecord::Base.connection.execute(my_query).to_a
+      @jurado2_ci = res[0][0]
+      @jurado2_nombre = res[0][1]
+      @jurado2_correo = res[0][2] 
+    end#if
+
+    # Si hay 1 jurado en la tabla calificador_externo_planilla
+    if jurados_ci.size == 1
+      @jurado2  = jurados_ci[0].first
+      my_query = "SELECT cedula, nombre, correo FROM calificador_externo WHERE cedula LIKE #{@jurado2}"
+      res = ActiveRecord::Base.connection.execute(my_query).to_a
+      @jurado2_ci = res[0][0]
+      @jurado2_nombre = res[0][1]
+      @jurado2_correo = res[0][2]
+    end#if
+
+    # Generacion de valor Hash
+    datos_comunes = @escuela+@nota.to_s+@periodo_academico_egreso+@ano_lectivo_egreso.to_s
+    datos_comunes = datos_comunes + @fecha_presentacion.join
+    estudiante = @cedula+@nombres+@apellidos+@correo+@promedio_general.to_s+@promedio_ponderado.to_s+@eficiencia.to_s+@mencion_id
+    estudiante = estudiante + @premio unless @premio.nil?
+    estudiante = estudiante + @premiodos unless @premiodos.nil?
+    tutor1 = @tutor1_ci+@tutor1_nombre+@tutor1_correo
+    tutor2 = @tutor2_ci+@tutor2_nombre+@tutor2_correo unless @tutor2_ci.nil? || @tutor2_nombre.nil? || @tutor2_correo.nil?
+    jurado1 = @jurado1_ci+@jurado1_nombre+@jurado1_correo
+    jurado2 = @jurado2_ci+@jurado2_nombre+@jurado2_correo
+    salt="aqui_debe_haber_un_string_compartido_aleatorio"
+    @hash = Digest::MD5.hexdigest(estudiante+datos_comunes+tutor1+jurado1+jurado2+salt)
+
+   end#if
+  end#def
+
+
+  def autocomplete_docentes
+    # If the autocomplete is used, it will send a parameter 'term', so we catch that here
+    unless params[:term].nil?
+      # Then we limit the number of records assigned by using the term value as a filter.
+      query = "SELECT DISTINCT cedula, nombre, correo
+               FROM ((SELECT cedula, nombre, correo
+                      FROM   docente
+                      WHERE  nombre LIKE \"\%#{params[:term]}\%\"
+                     )
+                      UNION
+                     (SELECT cedula, nombre, correo
+                      FROM   calificador_externo
+                      WHERE  nombre LIKE \"\%#{params[:term]}\%\"
+                      )) AS persona"
+      result = ActiveRecord::Base.connection.execute(query)
+
+      json_array = []
+      result.each do |r|
+        json_array.push({ cedula:r[0], nombre_completo:r[1], correo:r[2] })
+      end#do
+
+      respond_to do |format|
+        format.json { render json: json_array }
+      end#do
+    end#unless
+  end#def
+
+  def autocompletar_pareja
+    if request.xhr?
+      case params[:escuela]
+        when 'BIOLOGIA'
+          @escuela = 'B'
+        when 'COMPUTACION'
+          @escuela = 'C'
+        when 'FISICA'
+          @escuela = 'F'
+        when 'GEOQUIMICA'
+          @escuela = 'G'
+        when 'MATEMATICA'
+          @escuela = 'M'
+        when 'QUIMICA'
+          @escuela = 'Q'
+      end#case
+
+      # Seleccionar los datos de la pareja, los candidatos a pareja deben ser las personas
+      # que su periodo_academico_egreso y ano_lectivo_egreso sean igual al periodo_academico y ano_lectivo
+      # del semestre actual (calendario academico activo) y la licenciatura sea la misma del estudiante que esta llenando el formulario
+      # se excluye de la lista la persona que esta llenando el formulario y aquellos alumnos que ya hayan subido su documento TEG
+      query = "SELECT DISTINCT mis_estudiantes.cedula,
+                      mis_estudiantes.primer_nombre,
+                      mis_estudiantes.segundo_nombre,
+                      mis_estudiantes.primer_apellido,
+                      mis_estudiantes.segundo_apellido,
+                      mis_estudiantes.correo,
+                      mis_estudiantes.promedio_general,
+                      mis_estudiantes.promedio_ponderado,
+                      mis_estudiantes.eficiencia,
+                      mis_estudiantes.periodo_academico_egreso,
+                      mis_estudiantes.ano_lectivo_egreso
+               FROM  (SELECT cedula, 
+                             primer_nombre,
+                             segundo_nombre,
+                             primer_apellido,
+                             segundo_apellido,
+                             correo,
+                             promedio_general,
+                             promedio_ponderado,
+                             eficiencia,
+                             est.licenciatura_id,
+                             documento_subido,
+                             periodo_academico_egreso,
+                             ano_lectivo_egreso,
+                             CONCAT_WS(' ',primer_nombre,segundo_nombre,primer_apellido,segundo_apellido) as nombre_completo 
+                      FROM estudiante JOIN estudiante_en_licenciatura as est ON est.estudiante_cedula=estudiante.cedula
+                                      JOIN estudiante_datos_academicos as dat ON dat.estudiante_cedula=estudiante.cedula
+                                      JOIN planilla_individual as pla ON pla.estudiante_cedula=estudiante.cedula 
+) as mis_estudiantes 
+                      WHERE mis_estudiantes.nombre_completo LIKE \"%#{params[:query]}%\" AND
+                            periodo_academico_egreso LIKE \"#{params[:periodo_academico_egreso]}\" AND 
+                            ano_lectivo_egreso=#{params[:ano_lectivo_egreso]} AND
+                            documento_subido IS NULL AND
+                            cedula <> \"#{params[:cedula]}\" AND
+                            licenciatura_id LIKE \"#{@escuela}\"
+                      " 
+
+      res = ActiveRecord::Base.connection.execute(query).to_a
+      my_json = []
+      res.each do |registro|
+        # Construir el nombre completo del estudiante a mostrar en el typeahead
+        nombre_completo = registro[1]+" "+registro[2]+" "+registro[3]+" "+registro[4]
+
+        # Recuperar los premios del estudiante
+        my_query = "SELECT tipo_premio_academico.nombre 
+                    FROM tipo_premio_academico 
+                      JOIN graduando_con_premio ON graduando_con_premio.tipo_premio_academico_id = tipo_premio_academico.id
+                    WHERE estudiante_cedula LIKE \"#{registro[0]}\""
+        datos = ActiveRecord::Base.connection.execute(my_query).to_a.flat_map { |x| x }
+        premio  = datos.first #unless datos.nil?
+        premio2 = datos.second #unless datos.nil?
+
+        # Recuperar mencion del estudiante
+        my_query =  "SELECT gra.mencion_id 
+                     FROM graduando as gra 
+                       JOIN mencion as men  ON (gra.mencion_id=men.id)  
+                     WHERE gra.estudiante_cedula LIKE \"#{registro[0]}\""
+
+        datos = ActiveRecord::Base.connection.execute(my_query).to_a
+        mencion_id = datos[0].first unless datos[0].nil?
+
+        my_json.push("{\"cedula\"                   :\"#{registro[0]}\",
+                       \"nombre_completo\"          :\"#{nombre_completo}\",
+                       \"nombres_pareja\"           :\"#{registro[1]} #{registro[2]}\",
+                       \"apellidos_pareja\"         :\"#{registro[3]} #{registro[4]}\",
+                       \"correo_pareja\"            :\"#{registro[5]}\",
+                       \"promedio_general_pareja\"  :\"#{registro[6]}\",
+                       \"promedio_ponderado_pareja\":\"#{registro[7]}\",
+                       \"eficiencia_pareja\"        :\"#{registro[8]}\",
+                       \"mencion_id_pareja\"        :\"#{mencion_id}\",
+                       \"premio_pareja\"            :\"#{premio}\",
+                       \"premiodos_pareja\"         :\"#{premio2}\"
+                      }")
+      end#do
+      # Then we limit the number of records assigned to @people, by using the term value as a filter.
+      #@personas = Persona.select("id, nombre_completo").where("nombre_completo LIKE ?", "%#{params[:query]}%")
+      #headers["Acces-Control-Allow-Origin"]="*"
+      respond_to do |format|
+        #format.json { render json: [{:id => @cedula, :nombre_completo => @nombre_completo}] }
+        format.json { render json: '['+my_json.join(',')+']' }
+      end#do
+    else
+      respond_to do |format|
+        format.html # index.html.erb
+        #format.json { render json: my_json.join(',') }
+      end#do
+    end#if
+  end#def
+
+  def guardar_pdf
+    @doc_id = params[:id]
+    @ci = params[:ci]
+    @ci_p = params[:ci_p]
+    @titulo = params[:titulo]
+  end#def
+
+  def registrar_teg 
+    if request.xhr?
+
+      if params.has_key?(:ci_p) && params[:ci_p] != '' && !params[:ci_p].nil?
+        ci        = params[:ci]
+        ci_p      = params[:ci_p]
+        titulo    = params[:titulo]
+        @query1 = "UPDATE planilla_individual
+                  SET documento_subido = 1, titulo = \"#{titulo}\", es_pareja = #{ci_p} 
+                  WHERE estudiante_cedula LIKE \"#{ci}\" AND
+                        es_entrega_tesis LIKE \"1\""
+
+        @query2 = "UPDATE planilla_individual
+                         SET documento_subido = 1, titulo = \"#{titulo}\", es_pareja = #{ci} 
+                         WHERE estudiante_cedula LIKE \"#{ci_p}\" AND
+                               es_entrega_tesis LIKE \"1\""
+      else
+        ci = params[:ci]
+        titulo = params[:titulo]
+        @query = "UPDATE planilla_individual
+                 SET documento_subido = 1, titulo = \"#{titulo}\"
+                 WHERE estudiante_cedula LIKE \"#{ci}\" AND
+                      es_entrega_tesis LIKE \"1\""
+
+      end#if
+     
+      
+      # POSIBLE QUERY USANDO EL FRAMEWORK
+
+      #if params.has_key?(:ci_p) && params[:ci_p] != '' && !params[:ci_p].nil?
+        # ci        = params[:ci]
+        # ci_p      = params[:ci_p]
+        # titulo    = params[:titulo]
+        # pi = PlanillaIndividual.where("estudiante_cedula LIKE ? AND es_entrega_tesis LIKE ?", ci, "1").first
+        # pi.update_attributes(:documento_subido => 1, :titulo => titulo, :es_pareja => ci_p)
+
+        # pi = PlanillaIndividual.where("estudiante_cedula LIKE ? AND es_entrega_tesis LIKE ?", ci_p, "1").first
+        # pi.update_attributes(:documento_subido => 1, :titulo => titulo, :es_pareja => ci)
+      #else
+        # ci = params[:ci]
+        # titulo = params[:titulo]
+        # pi = PlanillaIndividual.where("estudiante_cedula LIKE ? AND es_entrega_tesis LIKE ?", ci, "1").first
+        # pi.update_attributes(:documento_subido => 1, :titulo => titulo)
+      #end#if
+
+      respond_to do |format|
+        format.html { render :layout => false }
+        #format.json { render json: {query:@query, query1:@query1, query2:@query2} }
+        format.json { render json: {status:'ok'} }
+      end
+    else
+      respond_to do |format|
+        format.html { render :layout => false }
+        format.json { render json: { status: :unprocessable_entity } }
+      end
+    end#if
+  end#def
+
+
+end#class

@@ -1,0 +1,184 @@
+<!-- TinyMCE esta en la carpeta publica fuera del pipeline asset -->
+<script type="text/javascript" src="/tinymce/tinymce.min.js"></script>
+<script type="text/javascript" src="/tinymce/jquery.tinymce.min.js"></script>
+
+<!-- Manipula el checkbox y el campo autocomplete de la pareja -->
+<script type="text/javascript">
+function showHideText(box,id,label_id) 
+{
+  var elm = document.getElementById(id)
+  elm.style.display = box.checked? "block":"none"
+
+  var elm = document.getElementById(label_id)
+  elm.style.display = box.checked? "block":"none"
+};
+
+$(function() {
+  if ($("#teg_en_pareja").is(':checked')) 
+  {
+    $("#teg_en_pareja").attr('checked', false);
+  }
+});
+</script>
+
+<!-- Configura el TinyMCE (editor del titulo) -->
+<script type="text/javascript">
+tinymce.init({selector:'.mytext',
+              content_css : "/tinymce/mycontent.css",
+              language : "es",
+              plugins: ["charmap"],
+              toolbar1: "bold italic subscript superscript charmap",	
+              menubar: false,
+              toolbar_items_size: 'large'
+             });
+</script>
+
+<% if @tesista_aprobado_sin_documento_subido.nil? &&
+      @periodo_academico_actual==@periodo_academico_egreso &&
+      @ano_lectivo_actual==@ano_lectivo_egreso %>
+
+<div class="container">
+<h5 style="color:red"><%= @errores %></h5>
+<h5 style="color:blue"><%= @men %></h5>
+
+<%= form_tag('http://127.0.0.1:3001/subir_teg_hacia_busconest') %>
+
+  <%= label_tag '(*) campos obligatorios' %>
+
+  <%= label_tag 'titulo', 'titulo *' %>
+  <%= text_field_tag :titulo, nil, {:style => "width:40%", :autocomplete => "off", :class => "mytext" }  %>
+
+  <%= label_tag 'resumen', 'resumen *' %>
+  <%= text_area_tag :resumen, nil, {:style => "width:40%", :rows => "10", :class => "mytext"}  %>
+
+  <%= label_tag 'palabras_clave', 'palabras clave *' %>
+  <%= text_field_tag :palabras_clave, nil, {:style => "width:40%", :autocomplete => "off"} %>
+
+  <%= label_tag 'visibilidad_id', 'visibilidad *' %>
+  <%= select_tag("visibilidad_id", "<option value=\"1\" selected=\"selected\">PUBLICO</option><option value=\"2\">PRIVADO</option>".html_safe, {style:'display:block'}) %>
+
+  <%= label_tag 'teg_en_pareja', 'TEG en pareja', style:'display:inline' %>
+  <%= check_box_tag "teg_en_pareja", 1, false, {:onClick => "showHideText(this,'autor','label_autor')"} %>
+
+  <br />
+
+  <%= label_tag 'autor', 'Nombre pareja *', style:'display:none', id:'label_autor' %>
+  <input id="autor" autocomplete="off" style="display:none;width:40%" type="text" /> 
+
+  <!-- Datos de la pareja (si los hay) -->
+  <%= hidden_field_tag 'cedula_pareja' %>
+  <%= hidden_field_tag 'nombres_pareja' %>
+  <%= hidden_field_tag 'apellidos_pareja' %>
+  <%= hidden_field_tag 'correo_pareja' %>
+  <%= hidden_field_tag 'promedio_general_pareja' %>
+  <%= hidden_field_tag 'promedio_ponderado_pareja' %>
+  <%= hidden_field_tag 'eficiencia_pareja' %>
+  <%= hidden_field_tag 'mencion_id_pareja' %>
+  <%= hidden_field_tag 'premio_pareja' %>
+  <%= hidden_field_tag 'premiodos_pareja' %>
+
+  <br />
+  <!-- Datos del estudiante -->
+  <%= hidden_field_tag 'cedula', @cedula %>
+  <%= hidden_field_tag 'nombres', @nombres %>
+  <%= hidden_field_tag 'apellidos', @apellidos %>
+  <%= hidden_field_tag 'correo', @correo %>
+  <%= hidden_field_tag 'promedio_general', @promedio_general %>
+  <%= hidden_field_tag 'promedio_ponderado', @promedio_ponderado %>
+  <%= hidden_field_tag 'eficiencia', @eficiencia %>
+  <%= hidden_field_tag 'mencion_id', @mencion_id %>
+  <%= hidden_field_tag 'premio', @premio %>
+  <%= hidden_field_tag 'premiodos', @premio2 %>
+
+  <br />
+  <!-- Datos comunes -->
+  <%= hidden_field_tag 'escuela', @escuela %>
+  <%= hidden_field_tag 'nota', @nota %>
+  <%= hidden_field_tag 'fecha_presentacion', @fecha_presentacion %>
+  <%= hidden_field_tag 'periodo_academico_egreso', @periodo_academico_egreso %>
+  <%= hidden_field_tag 'ano_lectivo_egreso', @ano_lectivo_egreso %>
+
+  <!-- Datos tutor1 -->
+  <%= hidden_field_tag 'tutor[id]', @tutor1_ci %>
+  <%= hidden_field_tag 'tutor[nombre_completo]', @tutor1_nombre %>
+  <%= hidden_field_tag 'tutor[correo]', @tutor1_correo %>
+
+  <!-- Datos tutor2 (si los hay) -->
+  <%= hidden_field_tag 'tutor2[id]', @tutor2_ci %>
+  <%= hidden_field_tag 'tutor2[nombre_completo]', @tutor2_nombre %>
+  <%= hidden_field_tag 'tutor2[correo]', @tutor2_correo %>
+
+  <!-- Datos jurado1 -->
+  <%= hidden_field_tag 'jurado[id]', @jurado1_ci %>
+  <%= hidden_field_tag 'jurado[nombre_completo]', @jurado1_nombre %>
+  <%= hidden_field_tag 'jurado[correo]', @jurado1_correo %>
+
+  <!-- Datos jurado2 -->
+  <%= hidden_field_tag 'jurado2[id]', @jurado2_ci %>
+  <%= hidden_field_tag 'jurado2[nombre_completo]', @jurado2_nombre %>
+  <%= hidden_field_tag 'jurado2[correo]', @jurado2_correo %>
+
+  <!-- Verificacion -->
+  <%= hidden_field_tag 'hash', @hash %>
+
+<%= submit_tag 'Guardar'  %>
+</form>
+
+<br /><br />
+
+estudiante_en_licenciatura: <%= @estudiante_en_licenciatura %><br />
+
+<br />
+
+nombres: <%= @nombres %><br />
+apellidos: <%= @apellidos %><br />
+cedula: <%= @cedula %><br />
+correo: <%= @correo %><br />
+escuela: <%= @escuela %><br />
+
+<br />
+
+promedio_general: <%= @promedio_general %><br />
+promedio_ponderado: <%= @promedio_ponderado %><br />
+eficiencia: <%= @eficiencia %><br />
+
+<br />
+
+fecha de presentacion: <%= @fecha_presentacion %><br />
+nota: <%= @nota %><br />
+mencion_id: <%= @mencion_id %><br />
+premio: <%= @premio %><br />
+premio2: <%= @premio2 %><br />
+
+<br />
+
+cedula_tutor: <%= @tutor1_ci %><br />
+nombre_tutor: <%= @tutor1_nombre %><br />
+correo_tutor: <%= @tutor1_correo %><br />
+
+<br />
+
+cedula_tutor2: <%= @tutor2_ci %><br />
+nombre_tutor2: <%= @tutor2_nombre %><br />
+correo_tutor2: <%= @tutor2_correo %><br />
+
+<br />
+
+cedula_jurado: <%= @jurado1_ci %><br />
+nombre_jurado: <%= @jurado1_nombre %><br />
+correo_jurado: <%= @jurado1_correo %><br />
+
+<br />
+
+cedula_jurado2: <%= @jurado2_ci %><br />
+nombre_jurado2: <%= @jurado2_nombre %><br />
+correo_jurado2: <%= @jurado2_correo %><br />
+
+<br />
+periodo_academico_egreso: <%= @periodo_academico_egreso %><br />
+ano_lectivo_egreso: <%= @ano_lectivo_egreso %><br />
+
+</div>
+
+<% end %>
+

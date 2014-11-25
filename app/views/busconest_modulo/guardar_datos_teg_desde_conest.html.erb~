@@ -1,0 +1,1 @@
+<h1>datos: <%= @params %></h1>
